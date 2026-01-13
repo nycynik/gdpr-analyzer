@@ -5,6 +5,8 @@ import sys
 import os
 import argparse
 import json
+import tempfile
+import shutil
 from splinter import Browser
 from urllib.parse import urlparse
 import requests
@@ -69,18 +71,20 @@ def get_content(target):
         # Instead we do it in a hack-ish way :
         # We retrieve the cookies database from the copy of our Firefox profile made by the geckodriver
         cookies_db_of_geckodriver = browser.driver.capabilities["moz:profile"] + "/cookies.sqlite"
-        cookies_db_of_firefox = browser.driver.profile.path + "/cookies.sqlite"
 
-        # Copy the database because the original one is locked until the browser object is garbage collected
-        with open(cookies_db_of_geckodriver, "rb") as gecko_db:
-            with open(cookies_db_of_firefox, "wb") as firefox_db:
-                firefox_db.write(gecko_db.read())
+        # Create a temporary copy to read from (original is locked while browser is open)
+        temp_db = tempfile.NamedTemporaryFile(delete=False, suffix=".sqlite")
+        temp_db.close()
+        shutil.copy2(cookies_db_of_geckodriver, temp_db.name)
 
-        # get cookies from Firefox's profile
-        with sqlite3.connect(cookies_db_of_firefox) as con:
+        # get cookies from the temporary database
+        with sqlite3.connect(temp_db.name) as con:
             cur = con.cursor()
             cur.execute("SELECT * FROM moz_cookies")
             content_cookies = cur.fetchall()
+
+        # Clean up temporary file
+        os.unlink(temp_db.name)
 
         content_html = browser.html
 
