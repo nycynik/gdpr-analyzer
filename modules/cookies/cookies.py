@@ -42,29 +42,39 @@ def cookie_expiration(cookie_creation_time, cookie_expiry):
     one_month_pt = int(config['delay_point']['one_month'])
 
     try:
+        # Calculate the difference in seconds
+        seconds_diff = cookie_expiry - cookie_creation_time
 
-        expiration_delay = timedelta(seconds=cookie_expiry - cookie_creation_time)
-
-        # define the number of points according to each expiry time range
-        if expiration_delay.days > 394:  # + 13 month
+        # Check if the difference is too large for timedelta (max is about 999999999 days)
+        # If seconds > ~86 trillion, it's too large. Treat as very long-term cookie.
+        max_seconds = 999999999 * 86400  # max days * seconds per day
+        if seconds_diff > max_seconds:
+            # Cookie expires far in the future, treat as more than 13 months
+            expiration_delay = timedelta(days=999999999)
             expiry_point = more_thirty_month_pt
+        else:
+            expiration_delay = timedelta(seconds=seconds_diff)
 
-        elif expiration_delay.days > 240:  # 8 month < delay < 13 month
-            expiry_point += thirty_month_pt
+            # define the number of points according to each expiry time range
+            if expiration_delay.days > 394:  # + 13 month
+                expiry_point = more_thirty_month_pt
 
-        elif expiration_delay.days > 180:  # 6 month < delay < 8 month
-            expiry_point += eight_month_pt
+            elif expiration_delay.days > 240:  # 8 month < delay < 13 month
+                expiry_point += thirty_month_pt
 
-        elif expiration_delay.days > 90:  # 3 month < delay < 6 month
-            expiry_point += six_month_pt
+            elif expiration_delay.days > 180:  # 6 month < delay < 8 month
+                expiry_point += eight_month_pt
 
-        elif expiration_delay.days > 30:  # 1 month < delay < 3 month
-            expiry_point += three_month_pt
+            elif expiration_delay.days > 90:  # 3 month < delay < 6 month
+                expiry_point += six_month_pt
 
-        else:  # - 1 month
-            expiry_point += one_month_pt
+            elif expiration_delay.days > 30:  # 1 month < delay < 3 month
+                expiry_point += three_month_pt
 
-    except KeyError:  # no value for expiry field in database
+            else:  # - 1 month
+                expiry_point += one_month_pt
+
+    except (KeyError, OverflowError):  # no value for expiry field in database or overflow
         expiration_delay = 'session cookie'
 
     return expiration_delay, expiry_point
@@ -185,12 +195,12 @@ def cookie_evaluate(cookies, target):
     print(f"{Bcolors.UNDERLINE}{Bcolors.BOLD}Detected cookie(s):{Bcolors.RESET}\n")
 
     for cookie in cookies:
-        name = cookie[3]
-        cookie_domain = cookie[1]
-        cookie_expiry = cookie[7]
-        cookie_creation_time = cookie[9] // 1000000
-        is_secure_attribute = cookie[10]
-        is_http_only_attribute = cookie[11]
+        name = cookie[2]
+        cookie_domain = cookie[4]
+        cookie_expiry = cookie[6]
+        cookie_creation_time = cookie[8] // 1000000
+        is_secure_attribute = cookie[9]
+        is_http_only_attribute = cookie[10]
 
         # third party analysis
         third_party, third_party_point = third_party_cookie(cookie_domain, target)

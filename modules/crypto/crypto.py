@@ -1,7 +1,7 @@
 #!/usr/bin/env python3.7
 # coding: utf-8
 
-from datetime import datetime
+from datetime import datetime, timezone
 import json
 import configparser
 from OpenSSL import crypto
@@ -241,7 +241,7 @@ class CertData:
     def __verify(self):
         """Verify if certificate is not expired"""
 
-        if self.certificate.not_valid_after < datetime.today():
+        if self.certificate.not_valid_after_utc < datetime.now(timezone.utc):
             self.has_expired = True
         else:
             self.has_expired = False
@@ -409,9 +409,9 @@ class TransmissionSecurity:
         result["certificate"] = {}
         result["certificate"]["score"] = self.certificate_score
         result["certificate"]["type"] = self.cert_data.policie
-        result["certificate"]["not_before"] = self.cert_data.certificate.not_valid_before.strftime("%a, %d %b %Y "
+        result["certificate"]["not_before"] = self.cert_data.certificate.not_valid_before_utc.strftime("%a, %d %b %Y "
                                                                                                    "%H:%M:%S %Z")
-        result["certificate"]["not_after"] = self.cert_data.certificate.not_valid_after.strftime("%a, %d %b %Y "
+        result["certificate"]["not_after"] = self.cert_data.certificate.not_valid_after_utc.strftime("%a, %d %b %Y "
                                                                                                  "%H:%M:%S %Z")
 
         result["certificate"]["sign_algo"] = self.cert_data.sign_algo.decode("utf-8") 

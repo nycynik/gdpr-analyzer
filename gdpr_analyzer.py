@@ -64,7 +64,7 @@ def get_content(target):
     FirefoxProfile(profile=profile_conf_name)
 
     # define profile preferences
-    browser = Browser('firefox', headless=True, profile=profile_conf_name, timeout=1000, wait_time=200,
+    browser = Browser('firefox', headless=True, profile=profile_conf_name, wait_time=10,
                       profile_preferences={"network.cookie.cookieBehavior": 0})
 
     # navigation run
@@ -77,10 +77,13 @@ def get_content(target):
         # sad trick shot to access cookies database only work for linux because of path
         paterform = platform.system()
         if paterform == "Darwin":
-            profile_repo = glob.glob('/var/folders/sd/*/T/rust_mozprofile*')
+            profile_repo = glob.glob('/var/folders/*/*/T/rust_mozprofile*')
         else:
             profile_repo = glob.glob('/tmp/rust_mozprofile*')
-            
+
+        if not profile_repo:
+            raise Exception("Could not find Firefox profile directory. Please ensure Firefox and geckodriver are installed.")
+
         latest_profile_repo = max(profile_repo, key=os.path.getctime)
 
         # copy database because we can not access to the one which is temporary create
@@ -184,9 +187,19 @@ def check_target(target):
         target_parse = urlparse(target, 'https')
     try:
         headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_11_5) AppleWebKit/537.36 (KHTML, like Gecko) '
-                          'Chrome/50.0.2661.102 Safari/537.36'}
-        r = requests.get(target_parse.geturl(), headers=headers, verify=False)
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) '
+                          'Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.9',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'DNT': '1',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Sec-Fetch-Dest': 'document',
+            'Sec-Fetch-Mode': 'navigate',
+            'Sec-Fetch-Site': 'none',
+            'Cache-Control': 'max-age=0'}
+        r = requests.get(target_parse.geturl(), headers=headers, verify=False, timeout=10)
         r.raise_for_status()
     except ConnectionError as e:
         print("{}[X] Error : Failed to establish a connection, verify that the target exists{}".format(Bcolors.RED,
