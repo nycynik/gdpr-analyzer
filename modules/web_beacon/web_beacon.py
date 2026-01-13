@@ -9,6 +9,8 @@ import tinycss
 import configparser
 import os
 from urllib.parse import urlparse
+from datetime import datetime
+from sys import platform
 
 MDL_URL = "http://www.malwaredomainlist.com/mdlcsv.php"
 MD_DOMAIN_URl = "http://www.malware-domains.com/files/justdomains.zip"
@@ -50,7 +52,7 @@ def find_beacon(content_html):
 
     # display web beacon title in terminal
     print(f"{Bcolors.UNDERLINE}{Bcolors.BOLD}Detected Web beacon(s):{Bcolors.RESET}\n")
-    bl_list = bl_website()
+    bl_list = get_blacklist()
     if bl_list is False:
         print("No response from the BL website\n")
 
@@ -103,15 +105,14 @@ def find_beacon(content_html):
                 except KeyError:
                     class_img = ""
                 # check if the source is blacklisted
-                if src != "" and bl_list is False:
-                    bl_matches = check_domains(src, bl_list)
-                    if bl_matches:
+                if src and bl_list:
+                    if is_domain_blacklisted(src, bl_list):
                         blacklist_nb = blacklist_nb+1
                         web_beacon_blacklist = True
 
                 # check if there are so suspicious words on the fields
                 # check the style field
-                if style != "":
+                if style:
                     find_style = check_style(style)
                     for h in range(len(find_style)):
                         if find_style[h] == "hidden":
@@ -159,7 +160,7 @@ def find_beacon(content_html):
                                 # TODO size in CSS
 
                 if web_beacon_position or web_beacon_size or web_beacon_blacklist or web_beacon_hidden:
-                    
+
                     if not (src.startswith('//') or src.startswith('http://') or src.startswith('https://')):
                         target_parse = urlparse('//' + src, 'https')
                     else:
@@ -356,42 +357,57 @@ def find_hidden_style_element(content, element):
     return result
 
 
-def bl_website():
+
+def get_blacklist():
     """
     Request BL website et return list of domains
     :return: blacklist domains or None
     """
-    site = requests.get(BL_DOMAIN_URL)
-    # TODO replace when the website is up
-    # f = open("utils/hosts.txt", "r") # TODO put absolute path
-    # hosts = f.read()
-    if site.status_code == 200:
-        hosts = site.text
-        a = "# Blocked domains:\n"
-        begin = hosts.find(a) + len(a)
-        end = -48
-        bl = hosts[begin:end]
-        found = re.sub(r'(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})\.(?:[\d]{1,3})', '', bl)
-        bl_domains = found.split("\n ")
-        return bl_domains
-    else:
-        return False
+    file = check_os_for_path()
+    try:
+        file_mod_time = datetime.fromtimestamp(os.stat(file).st_mtime)
+        now = datetime.now()
+        delta = now - file_mod_time
+        if delta.seconds > 2 :
+            resp = requests.get(BL_DOMAIN_URL)
+            if resp.status_code == 200:
+                content = resp.text
+                with open(file,"w+") as f:
+                    f.write(content)
+        else:
+            with open(file,"r") as f:
+                content = f.read()
+    except FileNotFoundError:
+        resp = requests.get(BL_DOMAIN_URL)
+        if resp.status_code == 200:
+            content = resp.text
+            with open(file,"w+") as f:
+                f.write(content)
+        else:
+            return None
+    blacklist = []
+    s = "# Blocked domains:\n"
+    begin = content.find(s) + len(s)
+    end = content.find("\n#", begin)
+
+    for line in content[begin:end].split("\n"):
+        host = line.split(" ")
+
+        if len(host) == 2:
+            blacklist.append(host[1])
+
+    return blacklist
 
 
-def check_domains(url, bl_list):
+def is_domain_blacklisted(url, bl_list):
     """
     Check suspicious url if it's present on blacklists
-    :param url: url need to check
-    :param bl_list: blacklist domains
-    :return: list of factors elements find
+    :param url: url to check
+    :param bl_list: blacklist of domains
+    :return: True if url is blacklisted False otherwise
     """
-    result = []
-    re_domain = re.search(r"(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z0-9][a-z0-9-]{0,61}[a-z0-9]", url)
-    url_domain = re_domain.group()
-    for i in bl_list:
-        if i == url_domain:
-            result.append("blacklist")
-    return result
+
+    return urlparse(url).netloc in bl_list
 
 
 def calculate_grade(web_beacon_score):
@@ -424,6 +440,24 @@ def calculate_grade(web_beacon_score):
     print("{}{}Web beacon grade:{} {}\n".format(Bcolors.BOLD, Bcolors.UNDERLINE, Bcolors.RESET, web_beacon_grade))
 
     return web_beacon_grade
+
+
+def check_os_for_path():
+    """
+    find the OS of the computer et define the path
+    :return: path + file
+    """
+    if "linux" in platform:
+        try:
+            os.mkdir(os.environ['HOME'] + "/.cache")
+        except FileExistsError:
+            pass
+        path = os.environ['HOME'] + "/.cache"
+    elif platform == "darwin":
+        path = "/Library/Caches"
+    elif platform == "win32":
+        path = "%AppData%"
+    return path + "/hosts.txt"
 
 
 def json_parser(web_beacon_score, web_beacon_url):
